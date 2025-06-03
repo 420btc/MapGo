@@ -1,0 +1,28 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" rx="64" fill="#1f2937"/>
+  <g transform="translate(86, 86)">
+    <!-- Main hexagon -->
+    <polygon points="170,43 256,96 256,203 170,256 85,203 85,96" fill="#3b82f6" stroke="#60a5fa" stroke-width="6"/>
+    <polygon points="170,96 213,123 213,176 170,203 128,176 128,123" fill="#1e40af" stroke="#3b82f6" stroke-width="3"/>
+    
+    <!-- Location pin -->
+    <circle cx="170" cy="150" r="20" fill="#ef4444"/>
+    <circle cx="170" cy="150" r="10" fill="#ffffff"/>
+    
+    <!-- Surrounding hexagons -->
+    <polygon points="64,64 107,85 107,128 64,149 21,128 21,85" fill="#10b981" stroke="#34d399" stroke-width="2" opacity="0.8"/>
+    <polygon points="277,64 320,85 320,128 277,149 234,128 234,85" fill="#f59e0b" stroke="#fbbf24" stroke-width="2" opacity="0.8"/>
+    <polygon points="64,235 107,256 107,299 64,320 21,299 21,256" fill="#8b5cf6" stroke="#a78bfa" stroke-width="2" opacity="0.8"/>
+    <polygon points="277,235 320,256 320,299 277,320 234,299 234,256" fill="#ef4444" stroke="#f87171" stroke-width="2" opacity="0.8"/>
+    
+    <!-- Additional small hexagons -->
+    <polygon points="32,150 53,160 53,181 32,192 11,181 11,160" fill="#06b6d4" stroke="#22d3ee" stroke-width="1" opacity="0.6"/>
+    <polygon points="309,150 330,160 330,181 309,192 288,181 288,160" fill="#ec4899" stroke="#f472b6" stroke-width="1" opacity="0.6"/>
+    <polygon points="170,21 191,32 191,53 170,64 149,53 149,32" fill="#84cc16" stroke="#a3e635" stroke-width="1" opacity="0.6"/>
+    <polygon points="170,277 191,288 191,309 170,320 149,309 149,288" fill="#f97316" stroke="#fb923c" stroke-width="1" opacity="0.6"/>
+  </g>
+  
+  <!-- Title -->
+  <text x="256" y="450" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="36" font-weight="bold">HexaConquest</text>
+  <text x="256" y="480" text-anchor="middle" fill="#9ca3af" font-family="Arial, sans-serif" font-size="18">Location Strategy Game</text>
+</svg>
