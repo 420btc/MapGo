@@ -191,7 +191,14 @@ export async function getSetting(key: string): Promise<unknown> {
 export async function saveHexagon(hexagon: HexagonData): Promise<void> {
   try {
     const db = await initDB();
-    await db.put('hexagons', hexagon);
+    
+    // Ensure conquered property is always a boolean
+    const normalizedHexagon: HexagonData = {
+      ...hexagon,
+      conquered: Boolean(hexagon.conquered)
+    };
+    
+    await db.put('hexagons', normalizedHexagon);
   } catch (error) {
     console.error('Failed to save hexagon:', error);
     throw error;
@@ -220,9 +227,20 @@ export async function getConqueredHexagons(): Promise<HexagonData[]> {
     const db = await initDB();
     const tx = db.transaction('hexagons', 'readonly');
     const store = tx.objectStore('hexagons');
-    const index = store.index('by-conquered');
     
-    return await index.getAll(IDBKeyRange.only(true));
+    const conqueredHexagons: HexagonData[] = [];
+    const cursor = await store.openCursor();
+    
+    if (cursor) {
+      do {
+        const hexagon = cursor.value as HexagonData;
+        if (hexagon && hexagon.conquered === true) {
+          conqueredHexagons.push(hexagon);
+        }
+      } while (await cursor.continue());
+    }
+    
+    return conqueredHexagons;
   } catch (error) {
     console.error('Failed to get conquered hexagons:', error);
     return [];
@@ -293,7 +311,20 @@ export async function getHexagonStats(): Promise<{
     const store = tx.objectStore('hexagons');
     
     const total = await store.count();
-    const conquered = await store.index('by-conquered').count(IDBKeyRange.only(true));
+    
+    // Count conquered hexagons manually to avoid IDBKeyRange issues
+    let conquered = 0;
+    const cursor = await store.openCursor();
+    
+    if (cursor) {
+      do {
+        const hexagon = cursor.value as HexagonData;
+        if (hexagon && hexagon.conquered === true) {
+          conquered++;
+        }
+      } while (await cursor.continue());
+    }
+    
     const unconquered = total - conquered;
     
     return { total, conquered, unconquered };
