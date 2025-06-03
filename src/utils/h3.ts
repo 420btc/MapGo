@@ -1,4 +1,4 @@
-import { latLngToCell, cellToBoundary, gridDisk, cellToLatLng, getRes0Cells } from 'h3-js';
+import { latLngToCell, cellToBoundary, gridDisk, cellToLatLng } from 'h3-js';
 import type { PlayerPosition, HexagonData, H3Config } from '@/types';
 
 // Configuración por defecto para H3
@@ -86,8 +86,7 @@ export function generateHexagonsInRadius(
  */
 export function hexagonsToGeoJSON(
   hexagons: string[],
-  hexagonDataMap: Map<string, HexagonData>,
-  config: H3Config = DEFAULT_H3_CONFIG
+  hexagonDataMap: Map<string, HexagonData>
 ): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = hexagons.map(h3Index => {
     const boundary = getHexagonBoundary(h3Index);

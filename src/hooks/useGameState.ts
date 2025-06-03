@@ -14,7 +14,6 @@ import {
   getPlayerState,
   getLatestPlayerPosition,
   cleanupOldPositions,
-  saveHexagon,
   getHexagon,
   conquerHexagon,
   getHexagonStats,
@@ -265,7 +264,7 @@ export function useGameState(h3Config: H3Config = DEFAULT_H3_CONFIG): UseGameSta
         : 'Failed to get current position';
       setError(errorMessage);
     }
-  }, [playerState, updateCurrentHexagon, homeBase]);
+  }, [playerState, homeBase, updateCurrentHexagon]);
 
   // Conquer current hexagon
   const conquerCurrentHexagon = useCallback(async (): Promise<boolean> => {

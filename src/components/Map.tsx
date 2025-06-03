@@ -136,7 +136,7 @@ const Map: React.FC<MapProps> = ({
     if (!map.current || !mapLoaded || !onHexSelect) return;
 
     onH3HexClick(map.current, onHexSelect);
-  }, [onHexSelect, mapLoaded]);
+  }, [onHexSelect, mapLoaded, currentHexagon, h3Config, position]);
 
   // Update hex grid when map moves
   useEffect(() => {
@@ -157,7 +157,7 @@ const Map: React.FC<MapProps> = ({
         map.current.off('moveend', handleMoveEnd);
       }
     };
-  }, [mapLoaded, h3Config]);
+  }, [mapLoaded, h3Config, position]);
 
   if (mapError) {
     return (

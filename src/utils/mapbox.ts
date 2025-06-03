@@ -10,6 +10,11 @@ import {
 } from './h3';
 import { getHexagons } from './indexedDB';
 
+// Type for map with custom marker storage
+interface MapWithMarkers {
+  _markers?: Record<string, mapboxgl.Marker>;
+}
+
 // Mapbox access token
 const MAPBOX_TOKEN = 'pk.eyJ1IjoiNDIwYnRjIiwiYSI6ImNtOTN3ejBhdzByNjgycHF6dnVmeHl2ZTUifQ.Utq_q5wN6DHwpkn6rcpZdw';
 
@@ -91,7 +96,8 @@ export function updatePlayerMarker(
   markerId: string = 'player-marker'
 ): mapboxgl.Marker {
   // Remove existing marker if it exists
-  const existingMarker = (map as any)._markers?.[markerId];
+  const mapWithMarkers = map as unknown as mapboxgl.Map & MapWithMarkers;
+  const existingMarker = mapWithMarkers._markers?.[markerId];
   if (existingMarker) {
     existingMarker.remove();
   }
@@ -115,10 +121,11 @@ export function updatePlayerMarker(
     .addTo(map);
 
   // Store marker reference
-  if (!(map as any)._markers) {
-    (map as any)._markers = {};
+  const markerStorage = mapWithMarkers as unknown as { _markers?: Record<string, mapboxgl.Marker> };
+  if (!markerStorage._markers) {
+    markerStorage._markers = {};
   }
-  (map as any)._markers[markerId] = marker;
+  markerStorage._markers[markerId] = marker;
 
   return marker;
 }
@@ -222,7 +229,7 @@ export async function addH3HexGrid(
     const hexagonDataMap = await getHexagons(h3Indices);
 
     // Convert to GeoJSON
-    const geoJsonData = hexagonsToGeoJSON(h3Indices, hexagonDataMap, config);
+    const geoJsonData = hexagonsToGeoJSON(h3Indices, hexagonDataMap);
 
     // Add source
     map.addSource(sourceId, {
@@ -294,7 +301,7 @@ export async function updateH3HexGridByBounds(
     const hexagonDataMap = await getHexagons(h3Indices);
 
     // Convert to GeoJSON
-    const geoJsonData = hexagonsToGeoJSON(h3Indices, hexagonDataMap, config);
+    const geoJsonData = hexagonsToGeoJSON(h3Indices, hexagonDataMap);
 
     // Update source data
     const source = map.getSource(sourceId) as mapboxgl.GeoJSONSource;
@@ -421,8 +428,9 @@ export function addHexagonPopup(
  */
 export function cleanupMap(map: mapboxgl.Map): void {
   // Remove all custom markers
-  if ((map as any)._markers) {
-    Object.values((map as any)._markers).forEach((marker: any) => {
+  const mapWithMarkers = map as unknown as mapboxgl.Map & MapWithMarkers;
+  if (mapWithMarkers._markers) {
+    Object.values(mapWithMarkers._markers).forEach((marker: mapboxgl.Marker) => {
       marker.remove();
     });
   }

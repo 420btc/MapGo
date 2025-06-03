@@ -23,7 +23,6 @@ const Map = dynamic(() => import('@/components/Map'), {
 export default function Home() {
   const {
     position,
-    playerState,
     hudData,
     currentHexagon,
     hexagonData,
@@ -34,11 +33,8 @@ export default function Home() {
     error,
     connectionStatus,
     initializeGame,
-    updatePlayerHealth,
-    updatePlayerScore,
     refreshPosition,
     conquerCurrentHexagon,
-    getHexagonInfo,
     setHomeBase,
     resetToHomeBase
   } = useGameState(DEFAULT_H3_CONFIG);

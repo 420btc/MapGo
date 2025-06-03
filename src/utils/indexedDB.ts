@@ -14,7 +14,7 @@ interface HexaConquestDB extends DBSchema {
   };
   gameSettings: {
     key: string;
-    value: any;
+    value: unknown;
   };
   hexagons: {
     key: string; // H3 index
@@ -162,7 +162,7 @@ export async function cleanupOldPositions(): Promise<void> {
 /**
  * Save game setting
  */
-export async function saveSetting(key: string, value: any): Promise<void> {
+export async function saveSetting(key: string, value: unknown): Promise<void> {
   try {
     const db = await initDB();
     await db.put('gameSettings', value, key);
@@ -175,7 +175,7 @@ export async function saveSetting(key: string, value: any): Promise<void> {
 /**
  * Get game setting
  */
-export async function getSetting(key: string): Promise<any> {
+export async function getSetting(key: string): Promise<unknown> {
   try {
     const db = await initDB();
     return await db.get('gameSettings', key);
@@ -335,7 +335,7 @@ export async function getPlayerHomeBase(playerId: string): Promise<PlayerPositio
     const store = tx.objectStore('gameSettings');
     
     const result = await store.get(`homeBase_${playerId}`);
-    return result?.position || null;
+    return (result as { position?: PlayerPosition })?.position || null;
   } catch (error) {
     console.error('Failed to get player home base:', error);
     return null;
