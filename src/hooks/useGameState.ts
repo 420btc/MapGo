@@ -365,19 +365,22 @@ export function useGameState(h3Config: H3Config = DEFAULT_H3_CONFIG): UseGameSta
   // Initialize resource zones
   const initializeResourceZones = useCallback(async (hexagons: string[]) => {
     try {
-      // Check if resource zones already exist
-      const existingZones = await getResourceZones();
-      if (existingZones.length > 0) {
-        setResourceZones(existingZones);
-        return;
-      }
-
+      console.log('🔵 Initializing resource zones for hexagons:', hexagons.length);
+      
+      // Always clear existing zones and generate new ones
+      console.log('🧹 Clearing existing resource zones...');
+      await clearResourceZones();
+      
       // Generate new resource zones
+      console.log('🔨 Generating new resource zones...');
       const newZones = generateResourceZones(hexagons, 8);
+      console.log('💾 Saving', newZones.length, 'new resource zones:', newZones);
+      
       await saveResourceZones(newZones);
       setResourceZones(newZones);
+      console.log('✅ Resource zones initialized successfully with', newZones.length, 'zones');
     } catch (err) {
-      console.error('Error initializing resource zones:', err);
+      console.error('❌ Error initializing resource zones:', err);
     }
   }, []);
 

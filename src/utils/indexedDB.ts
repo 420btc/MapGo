@@ -224,8 +224,34 @@ export async function saveHexagon(hexagon: HexagonData): Promise<void> {
 export async function getHexagon(h3Index: string): Promise<HexagonData | null> {
   try {
     const db = await initDB();
-    const hexagon = await db.get('hexagons', h3Index);
-    return hexagon || null;
+    const tx = db.transaction(['hexagons', 'resourceZones'], 'readonly');
+    const hexagonStore = tx.objectStore('hexagons');
+    const resourceStore = tx.objectStore('resourceZones');
+    
+    const hexagon = await hexagonStore.get(h3Index);
+    const resourceZone = await resourceStore.get(h3Index);
+    
+    await tx.done;
+    
+    if (hexagon) {
+      // Agregar zona de recursos si existe
+      if (resourceZone) {
+        hexagon.resourceZone = resourceZone;
+      }
+      return hexagon;
+    } else if (resourceZone) {
+      // Crear hexágono básico si solo existe zona de recursos
+      return {
+        id: h3Index,
+        conquered: false,
+        center: [0, 0], // Se calculará en el frontend
+        resourceZone,
+        conquestCost: { wood: 10, iron: 5, stone: 8 },
+        maintenanceCost: { wood: 2, iron: 1, stone: 2 }
+      };
+    }
+    
+    return null;
   } catch (error) {
     console.error('Failed to get hexagon:', error);
     return null;
@@ -268,13 +294,31 @@ export async function getHexagons(h3Indices: string[]): Promise<Map<string, Hexa
     const db = await initDB();
     const hexagonMap = new Map<string, HexagonData>();
     
-    const tx = db.transaction('hexagons', 'readonly');
-    const store = tx.objectStore('hexagons');
+    const tx = db.transaction(['hexagons', 'resourceZones'], 'readonly');
+    const hexagonStore = tx.objectStore('hexagons');
+    const resourceStore = tx.objectStore('resourceZones');
     
     for (const h3Index of h3Indices) {
-      const hexagon = await store.get(h3Index);
+      const hexagon = await hexagonStore.get(h3Index);
+      const resourceZone = await resourceStore.get(h3Index);
+      
       if (hexagon) {
+        // Agregar zona de recursos si existe
+        if (resourceZone) {
+          hexagon.resourceZone = resourceZone;
+        }
         hexagonMap.set(h3Index, hexagon);
+      } else if (resourceZone) {
+        // Crear hexágono básico si solo existe zona de recursos
+        const basicHexagon: HexagonData = {
+          id: h3Index,
+          conquered: false,
+          center: [0, 0], // Se calculará en el frontend
+          resourceZone,
+          conquestCost: { wood: 10, iron: 5, stone: 8 },
+          maintenanceCost: { wood: 2, iron: 1, stone: 2 }
+        };
+        hexagonMap.set(h3Index, basicHexagon);
       }
     }
     

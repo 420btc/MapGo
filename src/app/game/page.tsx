@@ -5,10 +5,7 @@ import dynamic from 'next/dynamic';
 import { useGameState } from '@/hooks/useGameState';
 import HUD from '@/components/HUD';
 import HexagonModal from '@/components/HexagonModal';
-import ResourceCollectionModal from '@/components/ResourceCollectionModal';
-import ResourceBar from '@/components/ResourceBar';
-import HexagonOverlay from '@/components/HexagonOverlay';
-import type { HexagonData, ResourceZone } from '@/types';
+import type { HexagonData } from '@/types';
 import { DEFAULT_H3_CONFIG, generateHexagonsInRadius, getCurrentHexagon } from '@/utils/h3';
 
 // Dynamically import Map component to avoid SSR issues with Mapbox
@@ -52,22 +49,6 @@ export default function Home() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedHexagon, setSelectedHexagon] = useState<string | null>(null);
   const [selectedHexagonData, setSelectedHexagonData] = useState<HexagonData | undefined>(undefined);
-  const [resourceModalOpen, setResourceModalOpen] = useState(false);
-  const [currentResourceZone, setCurrentResourceZone] = useState<ResourceZone | null>(null);
-  const [isCollectingResource, setIsCollectingResource] = useState(false);
-
-  console.log('🎮 Game page render:', {
-    position: position ? `${position.latitude.toFixed(4)}, ${position.longitude.toFixed(4)}` : 'null',
-    currentHexagon,
-    resourceZonesCount: resourceZones.length,
-    resourceZones: resourceZones.map(zone => ({
-      id: zone.id.slice(-6),
-      type: zone.resourceType,
-      amount: zone.amount
-    })),
-    isLoading,
-    error
-  });
 
   // Initialize game on component mount
   useEffect(() => {
@@ -90,20 +71,6 @@ export default function Home() {
       initializeResourceZones(hexagonsInRadius);
     }
   }, [position, currentHexagon, resourceZones.length, initializeResourceZones]);
-
-  // Detect when player enters a resource zone
-  useEffect(() => {
-    if (!currentHexagon || !resourceZones.length) return;
-
-    // Check if current hexagon is a resource zone
-    const resourceZone = resourceZones.find(zone => zone.id === currentHexagon);
-    
-    if (resourceZone && resourceZone.amount > 0) {
-      console.log('🎯 Player entered resource zone:', resourceZone);
-      setCurrentResourceZone(resourceZone);
-      setResourceModalOpen(true);
-    }
-  }, [currentHexagon, resourceZones]);
 
   // Handle hex selection
   const handleHexSelect = async (h3Index: string, coordinates: [number, number], hexagonData?: HexagonData) => {
@@ -149,38 +116,14 @@ export default function Home() {
 
   // Handle conquer button
   const handleConquerHexagon = async () => {
-    if (!currentHexagon || hexagonData?.conquered) return;
-    
-    // Verificar recursos
-    if (hudData?.playerState?.resources) {
-      const hasResources = 
-        hudData.playerState.resources.wood >= 10 &&
-        hudData.playerState.resources.iron >= 5 &&
-        hudData.playerState.resources.stone >= 8;
-      
-      if (!hasResources) {
-        const needed = [];
-        if (hudData.playerState.resources.wood < 10) {
-          needed.push(`${10 - hudData.playerState.resources.wood} 🪵 Madera`);
-        }
-        if (hudData.playerState.resources.iron < 5) {
-          needed.push(`${5 - hudData.playerState.resources.iron} ⚙️ Hierro`);
-        }
-        if (hudData.playerState.resources.stone < 8) {
-          needed.push(`${8 - hudData.playerState.resources.stone} 🪨 Piedra`);
-        }
-        
-        alert(`❌ Recursos insuficientes para conquistar.\n\nNecesitas:\n${needed.join('\n')}`);
-        return;
+    if (currentHexagon && !hexagonData?.conquered) {
+      const success = await conquerCurrentHexagon();
+      if (success) {
+        alert('🎉 ¡Hexágono conquistado exitosamente!');
+        console.log('Current hexagon conquered!');
+      } else {
+        alert('❌ No se pudo conquistar el hexágono. Verifica que tengas suficientes recursos.');
       }
-    }
-    
-    const success = await conquerCurrentHexagon();
-    if (success) {
-      alert('🎉 ¡Hexágono conquistado exitosamente!');
-      console.log('Current hexagon conquered!');
-    } else {
-      alert('❌ No se pudo conquistar el hexágono. Inténtalo de nuevo.');
     }
   };
 
@@ -201,36 +144,6 @@ export default function Home() {
     await resetToHomeBase();
   };
 
-  // Handle resource collection from modal
-  const handleResourceCollectFromModal = async () => {
-    if (!currentResourceZone) return;
-
-    setIsCollectingResource(true);
-    
-    try {
-      const success = await collectResources(currentResourceZone.id);
-      
-      if (success) {
-        const resourceName = {
-          wood: 'madera',
-          iron: 'hierro',
-          stone: 'piedra'
-        }[currentResourceZone.resourceType] || 'recursos';
-        
-        alert(`✅ ¡Has recolectado ${resourceName} exitosamente!`);
-        setResourceModalOpen(false);
-        setCurrentResourceZone(null);
-      } else {
-        alert('❌ No se pudieron recolectar los recursos. Inténtalo de nuevo.');
-      }
-    } catch (error) {
-      console.error('Error collecting resources:', error);
-      alert('❌ Error al recolectar recursos.');
-    } finally {
-      setIsCollectingResource(false);
-    }
-  };
-
   return (
     <div className="h-screen w-screen overflow-hidden bg-gray-900">
       {/* HUD Overlay */}
@@ -238,17 +151,6 @@ export default function Home() {
         data={hudData} 
         isLoading={isLoading} 
         error={error}
-      />
-      
-      {/* Resource Bar */}
-      <ResourceBar resources={hudData?.playerState?.resources || null} />
-      
-      {/* Hexagon Overlay Info */}
-      <HexagonOverlay 
-        currentHexagon={currentHexagon}
-        hexagonData={hexagonData}
-        conqueredCount={hexagonStats?.conquered || 0}
-        totalCount={hexagonStats?.total || 0}
       />
 
       {/* Main Game Area */}
@@ -319,31 +221,13 @@ export default function Home() {
             {currentHexagon && !hexagonData?.conquered && (
               <button
                 onClick={handleConquerHexagon}
-                disabled={isLoading || (hudData?.playerState?.resources && (
-                  hudData.playerState.resources.wood < 10 ||
-                  hudData.playerState.resources.iron < 5 ||
-                  hudData.playerState.resources.stone < 8
-                ))}
-                className={`${
-                  hudData?.playerState?.resources && (
-                    hudData.playerState.resources.wood >= 10 &&
-                    hudData.playerState.resources.iron >= 5 &&
-                    hudData.playerState.resources.stone >= 8
-                  ) 
-                    ? 'bg-green-600 hover:bg-green-700' 
-                    : 'bg-gray-600 cursor-not-allowed'
-                } disabled:bg-gray-600 text-white px-4 py-2 rounded-lg shadow-lg transition-colors flex items-center space-x-2`}
+                disabled={isLoading}
+                className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white px-4 py-2 rounded-lg shadow-lg transition-colors flex items-center space-x-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <span>
-                  {hudData?.playerState?.resources && (
-                    hudData.playerState.resources.wood >= 10 &&
-                    hudData.playerState.resources.iron >= 5 &&
-                    hudData.playerState.resources.stone >= 8
-                  ) ? 'Conquistar' : 'Sin Recursos'}
-                </span>
+                <span>Conquistar</span>
               </button>
             )}
             
@@ -372,67 +256,97 @@ export default function Home() {
 
         {/* Home Base Status with Resources */}
         {homeBase && hudData?.playerState && (
-          <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-black/80 text-white p-4 rounded-lg shadow-xl z-40 min-w-[300px]">
-            <h3 className="font-bold text-lg mb-3 flex items-center justify-between">
-              <span>🏠 Base Principal</span>
-              {isAwayFromHome ? 
-                <span className="text-xs text-orange-400 bg-orange-900/30 px-2 py-1 rounded">Lejos</span> : 
-                <span className="text-xs text-green-400 bg-green-900/30 px-2 py-1 rounded">En Casa</span>
+          <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-black/70 text-white p-3 rounded-lg shadow-lg z-40 min-w-[200px]">
+            <h3 className="font-bold text-sm mb-2">🏠 Base Principal</h3>
+            <p className="text-xs mb-1">Lat: {homeBase.latitude.toFixed(6)}</p>
+            <p className="text-xs mb-2">Lng: {homeBase.longitude.toFixed(6)}</p>
+            
+            {/* Base Status */}
+            <p className="text-xs mb-2">
+              Estado: {isAwayFromHome ? 
+                <span className="text-orange-400">Lejos de Casa</span> : 
+                <span className="text-green-400">En Casa</span>
               }
-            </h3>
+            </p>
             
-            {/* Base Location */}
-            <div className="text-xs text-gray-300 mb-3">
-              <p>📍 Lat: {homeBase.latitude.toFixed(6)} | Lng: {homeBase.longitude.toFixed(6)}</p>
-            </div>
-            
-            {/* Base Resources Display */}
+            {/* Base Resources */}
             {hudData.playerState.resources && (
-              <div className="border-t border-gray-600 pt-3">
-                <h4 className="text-sm font-semibold mb-2 text-gray-300">💰 Recursos Disponibles:</h4>
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="bg-amber-900/30 border border-amber-700/50 rounded-lg p-2 text-center">
-                    <div className="text-2xl mb-1">🪵</div>
-                    <div className="text-lg font-bold text-amber-300">{hudData.playerState.resources.wood}</div>
-                    <div className="text-xs text-gray-400">Madera</div>
+              <div className="border-t border-gray-600 pt-2">
+                <h4 className="text-xs font-semibold mb-1">💰 Recursos de la Base:</h4>
+                <div className="grid grid-cols-3 gap-1 text-xs">
+                  <div className="bg-amber-900/50 rounded px-1 py-0.5 text-center">
+                    <div className="text-amber-300">🪵</div>
+                    <div>{hudData.playerState.resources.wood}</div>
                   </div>
-                  <div className="bg-gray-700/30 border border-gray-600/50 rounded-lg p-2 text-center">
-                    <div className="text-2xl mb-1">⚙️</div>
-                    <div className="text-lg font-bold text-gray-300">{hudData.playerState.resources.iron}</div>
-                    <div className="text-xs text-gray-400">Hierro</div>
+                  <div className="bg-gray-700/50 rounded px-1 py-0.5 text-center">
+                    <div className="text-gray-300">⚙️</div>
+                    <div>{hudData.playerState.resources.iron}</div>
                   </div>
-                  <div className="bg-stone-700/30 border border-stone-600/50 rounded-lg p-2 text-center">
-                    <div className="text-2xl mb-1">🪨</div>
-                    <div className="text-lg font-bold text-stone-300">{hudData.playerState.resources.stone}</div>
-                    <div className="text-xs text-gray-400">Piedra</div>
+                  <div className="bg-stone-700/50 rounded px-1 py-0.5 text-center">
+                    <div className="text-stone-300">🪨</div>
+                    <div>{hudData.playerState.resources.stone}</div>
                   </div>
                 </div>
               </div>
             )}
             
-            {/* Base Production & Maintenance Info */}
+            {/* Base Production Info */}
             {hudData.playerState.baseHexagon && (
-              <div className="border-t border-gray-600 pt-3 mt-3">
-                <h4 className="text-sm font-semibold mb-2 text-gray-300">🏭 Producción y Mantenimiento:</h4>
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-green-400">📈 Producción/hora:</span>
-                    <span className="text-green-300">+5 🪵 +3 ⚙️ +4 🪨</span>
-                  </div>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-red-400">📉 Mantenimiento:</span>
-                    <span className="text-red-300">-2 🪵 -1 ⚙️ -1 🪨</span>
-                  </div>
-                  
-                  {/* Maintenance Warning */}
-                  {hudData.playerState.resources && (
-                    <div className="mt-2 p-2 rounded bg-yellow-900/20 border border-yellow-700/50">
-                      <p className="text-xs text-yellow-300">
-                        ⚠️ <strong>Atención:</strong> Mantén recursos suficientes para el mantenimiento o perderás la base.
-                      </p>
-                    </div>
-                  )}
-                </div>
+              <div className="border-t border-gray-600 pt-2 mt-2">
+                <h4 className="text-xs font-semibold mb-1">🏭 Producción:</h4>
+                <p className="text-xs text-green-400">+5 🪵 +3 ⚙️ +4 🪨 /hora</p>
+                <p className="text-xs text-red-400">-2 🪵 -1 ⚙️ -1 🪨 /mantenimiento</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Hexagon Stats */}
+        {hexagonStats && (
+          <div className="absolute bottom-20 left-4 bg-black/70 text-white p-3 rounded-lg shadow-lg z-40">
+            <h3 className="font-bold text-sm mb-2">🏆 Estadísticas de Conquista</h3>
+            <p className="text-xs">Conquistados: {hexagonStats.conquered}</p>
+            <p className="text-xs">Total Visitados: {hexagonStats.total}</p>
+            <p className="text-xs">Progreso: {hexagonStats.total > 0 ? Math.round((hexagonStats.conquered / hexagonStats.total) * 100) : 0}%</p>
+            
+            {/* Game Instructions */}
+            <div className="border-t border-gray-600 pt-2 mt-2">
+              <h4 className="text-xs font-semibold mb-1">🎮 Cómo Jugar:</h4>
+              <ul className="text-xs text-gray-300 space-y-0.5">
+                <li>• Muévete físicamente para explorar</li>
+                <li>• Toca hexágonos para conquistarlos</li>
+                <li>• Establece bases para generar recursos</li>
+                <li>• Gestiona tus recursos sabiamente</li>
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {/* Current Hexagon Info */}
+        {currentHexagon && (
+          <div className="absolute top-4 left-4 bg-black/70 text-white p-3 rounded-lg shadow-lg z-40 max-w-xs">
+            <h3 className="font-bold text-sm mb-2">📍 Hexágono Actual</h3>
+            <p className="text-xs mb-1">ID: {currentHexagon.slice(0, 12)}...</p>
+            <p className="text-xs mb-1">
+              Estado: {hexagonData?.conquered ? 
+                <span className="text-green-400">Conquistado</span> : 
+                <span className="text-yellow-400">Disponible</span>
+              }
+            </p>
+            {hexagonData?.conquered && hexagonData.conqueredBy && (
+              <p className="text-xs">Por: {hexagonData.conqueredBy}</p>
+            )}
+            {hexagonData?.conqueredAt && (
+              <p className="text-xs">Fecha: {hexagonData.conqueredAt.toLocaleString()}</p>
+            )}
+            
+            {/* Action Instructions */}
+            {!hexagonData?.conquered && (
+              <div className="border-t border-gray-600 pt-2 mt-2">
+                <p className="text-xs text-blue-300">💡 Toca el hexágono en el mapa o usa el botón 'Conquistar' para reclamarlo</p>
+                {hudData?.playerState?.resources && (
+                  <p className="text-xs text-gray-400 mt-1">Costo: 10 🪵 5 ⚙️ 8 🪨</p>
+                )}
               </div>
             )}
           </div>
@@ -442,13 +356,13 @@ export default function Home() {
         {!position && !error && !isLoading && (
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-50">
             <div className="bg-white p-8 rounded-lg shadow-xl max-w-md mx-4 text-center">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">🎯 Bienvenido a HexaConquest!</h2>
+              <h2 className="text-2xl font-bold text-gray-800 mb-4">🎯 Welcome to HexaConquest!</h2>
               <p className="text-gray-600 mb-4">
                 Conquista territorios hexagonales en el mundo real usando indexación geoespacial H3.
               </p>
               <div className="text-sm text-gray-500 mb-6">
                 <p>• Muévete para descubrir nuevos hexágonos</p>
-                <p>• Recolecta recursos para conquistar</p>
+                <p>• Toca hexágonos para conquistarlos</p>
                 <p>• Construye tu imperio territorial</p>
                 <p>• Gestiona recursos y establece bases</p>
               </div>
@@ -459,7 +373,7 @@ export default function Home() {
                 onClick={initializeGame}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
               >
-                🚀 Comenzar Conquista
+                🚀 Start Conquest
               </button>
             </div>
           </div>
@@ -475,16 +389,6 @@ export default function Home() {
           playerResources={hudData?.playerState?.resources}
           onConquer={handleConquestFromModal}
           onEstablishBase={handleEstablishBaseFromModal}
-        />
-        
-        {/* Resource Collection Modal */}
-        <ResourceCollectionModal
-          isOpen={resourceModalOpen}
-          onClose={() => setResourceModalOpen(false)}
-          resourceZone={currentResourceZone}
-          playerResources={hudData?.playerState?.resources}
-          onCollect={handleResourceCollectFromModal}
-          isCollecting={isCollectingResource}
         />
       </div>
     </div>

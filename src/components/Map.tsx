@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
+import { getHexagonBoundary } from '@/utils/h3';
 import type { PlayerPosition, HexagonData, H3Config, ResourceZone } from '@/types';
 import {
   initializeMap,
@@ -13,8 +14,7 @@ import {
   highlightCurrentHexagon,
   onH3HexClick,
   addHexagonPopup,
-  cleanupMap,
-  addResourceZones
+  cleanupMap
 } from '@/utils/mapbox';
 import { DEFAULT_H3_CONFIG } from '@/utils/h3';
 
@@ -58,52 +58,34 @@ const Map: React.FC<MapProps> = ({
       });
 
       map.current.on('load', async () => {
-        console.log('🗺️ Map loaded successfully');
         setMapLoaded(true);
         setMapError(null);
         
-        // Esperar un momento para asegurar que el estilo está completamente cargado
-        setTimeout(async () => {
-          // Add H3 hex grid if position is available
-          if (position && map.current) {
-            try {
-              console.log('🔵 Adding H3 hex grid from Map component');
-              console.log('Current position:', position);
-              console.log('H3 config:', h3Config);
-              
-              await addH3HexGrid(
-                map.current, 
-                position,
-                h3Config
-              );
-              console.log('✅ H3 hex grid added successfully from Map component');
-              
-              // Add resource zones if available
-              if (resourceZones.length > 0) {
-                console.log('🔵 Adding initial resource zones:', resourceZones.length);
-                addResourceZones(map.current, resourceZones, onResourceCollect);
-                console.log('✅ Initial resource zones added');
-              }
-              
-              // Set up hex click handler
-              if (onHexSelect) {
-                console.log('🔵 Setting up hex click handler');
-                onH3HexClick(map.current, onHexSelect);
-              }
-              
-              // Highlight current hexagon if available
-              if (currentHexagon) {
-                console.log('🔵 Highlighting current hexagon:', currentHexagon);
-                highlightCurrentHexagon(map.current, position, h3Config);
-              }
-            } catch (error) {
-              console.error('❌ Failed to add H3 hex grid:', error);
-              setMapError('Failed to load hexagon grid. Please refresh the page.');
+        // Add H3 hex grid if position is available
+        if (position && map.current) {
+          try {
+            console.log('Adding H3 hex grid with position:', position);
+            console.log('H3 config:', h3Config);
+            await addH3HexGrid(
+              map.current, 
+              position,
+              h3Config
+            );
+            console.log('H3 hex grid added successfully');
+            
+            // Set up hex click handler
+            if (onHexSelect) {
+              onH3HexClick(map.current, onHexSelect);
             }
-          } else {
-            console.warn('⚠️ Position not available when map loaded');
+            
+            // Highlight current hexagon if available
+            if (currentHexagon) {
+              highlightCurrentHexagon(map.current, position, h3Config);
+            }
+          } catch (error) {
+            console.error('Failed to add H3 hex grid:', error);
           }
-        }, 500); // Esperar 500ms para asegurar que el estilo está cargado
+        }
       });
 
       map.current.on('error', (e) => {
@@ -127,19 +109,10 @@ const Map: React.FC<MapProps> = ({
 
   // Update map when position changes
   useEffect(() => {
-    if (!map.current || !mapLoaded || !position) {
-      console.log('⚠️ Map update skipped:', { 
-        hasMap: !!map.current, 
-        mapLoaded, 
-        hasPosition: !!position 
-      });
-      return;
-    }
+    if (!map.current || !mapLoaded || !position) return;
 
     const updateMap = async () => {
       try {
-        console.log('🔵 Updating map with new position:', position);
-        
         // Center map on new position
         centerMapOnPosition(map.current!, position);
         
@@ -150,18 +123,15 @@ const Map: React.FC<MapProps> = ({
         addAccuracyCircle(map.current!, position);
         
         // Update H3 hex grid based on current bounds or player position
-        console.log('🔵 Updating hex grid...');
         await updateH3HexGridByBounds(map.current!, h3Config, 'h3-hex-grid', position);
         
         // Highlight current hexagon
         if (currentHexagon) {
-          console.log('🔵 Highlighting current hexagon:', currentHexagon);
           highlightCurrentHexagon(map.current!, position, h3Config);
         }
         
-        console.log('✅ Map update completed');
       } catch (error) {
-        console.error('❌ Failed to update map:', error);
+        console.error('Failed to update map:', error);
       }
     };
 
@@ -198,25 +168,110 @@ const Map: React.FC<MapProps> = ({
 
   // Visualize resource zones
   useEffect(() => {
-    if (!map.current || !mapLoaded) {
-      console.log('⚠️ Resource zones update skipped:', { 
-        hasMap: !!map.current, 
-        mapLoaded,
-        resourceZonesCount: resourceZones.length 
-      });
-      return;
+    if (!map.current || !mapLoaded || !resourceZones.length) return;
+
+    // Remove existing resource zone layers
+    if (map.current.getLayer('resource-zones')) {
+      map.current.removeLayer('resource-zones');
+    }
+    if (map.current.getSource('resource-zones')) {
+      map.current.removeSource('resource-zones');
     }
 
-    console.log('🔵 Visualizing resource zones:', resourceZones.length);
-    
-    try {
-      // Siempre llamar a addResourceZones, incluso si no hay zonas (para limpiar)
-      addResourceZones(map.current, resourceZones, onResourceCollect);
-      console.log('✅ Resource zones visualization completed');
-    } catch (error) {
-      console.error('❌ Error adding resource zones:', error);
-    }
+    // Create GeoJSON features for resource zones
+    const features = resourceZones.map(zone => {
+      const boundary = getHexagonBoundary(zone.id);
+      const coordinates = [boundary.map((coord: number[]) => [coord[1], coord[0]])];
+      
+      return {
+        type: 'Feature' as const,
+        properties: {
+          id: zone.id,
+          resourceType: zone.resourceType,
+          amount: zone.amount,
+          regenerationRate: zone.regenerationRate,
+          lastRegeneration: zone.lastRegeneration
+        },
+        geometry: {
+          type: 'Polygon' as const,
+          coordinates
+        }
+      };
+    });
+
+    // Add resource zones source
+    map.current.addSource('resource-zones', {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features
+      }
+    });
+
+    // Add resource zones layer
+    map.current.addLayer({
+      id: 'resource-zones',
+      type: 'fill',
+      source: 'resource-zones',
+      paint: {
+        'fill-color': [
+          'case',
+          ['==', ['get', 'resourceType'], 'wood'], '#8B4513',
+          ['==', ['get', 'resourceType'], 'iron'], '#708090',
+          ['==', ['get', 'resourceType'], 'stone'], '#696969',
+          '#CCCCCC'
+        ],
+        'fill-opacity': 0.3,
+        'fill-outline-color': [
+          'case',
+          ['==', ['get', 'resourceType'], 'wood'], '#654321',
+          ['==', ['get', 'resourceType'], 'iron'], '#2F4F4F',
+          ['==', ['get', 'resourceType'], 'stone'], '#2F2F2F',
+          '#999999'
+        ]
+      }
+    });
+
+    // Add click handler for resource zones
+    const handleResourceZoneClick = (e: any) => {
+      const features = map.current!.queryRenderedFeatures(e.point, {
+        layers: ['resource-zones']
+      });
+
+      if (features.length > 0) {
+        const feature = features[0];
+        const hexagonId = feature.properties?.id;
+        
+        if (hexagonId && onResourceCollect) {
+          onResourceCollect(hexagonId);
+        }
+      }
+    };
+
+    map.current.on('click', 'resource-zones', handleResourceZoneClick);
+
+    // Change cursor on hover
+    const handleMouseEnter = () => {
+      map.current!.getCanvas().style.cursor = 'pointer';
+    };
+
+    const handleMouseLeave = () => {
+      map.current!.getCanvas().style.cursor = '';
+    };
+
+    map.current.on('mouseenter', 'resource-zones', handleMouseEnter);
+    map.current.on('mouseleave', 'resource-zones', handleMouseLeave);
+
+    return () => {
+      if (map.current) {
+        map.current.off('click', 'resource-zones', handleResourceZoneClick);
+        map.current.off('mouseenter', 'resource-zones', handleMouseEnter);
+        map.current.off('mouseleave', 'resource-zones', handleMouseLeave);
+      }
+    };
   }, [mapLoaded, resourceZones, onResourceCollect]);
+
+
 
   if (mapError) {
     return (

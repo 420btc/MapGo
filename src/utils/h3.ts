@@ -3,16 +3,16 @@ import type { PlayerPosition, HexagonData, H3Config, ResourceType, ResourceZone,
 
 // Configuración por defecto para H3
 export const DEFAULT_H3_CONFIG: H3Config = {
-  resolution: 9, // ~50-100 metros por hexágono
-  fillColor: '#60a5fa', // Azul claro transparente para hexágonos no conquistados
-  strokeColor: '#e0e7ff', // Líneas azul claro más sutiles
-  conqueredColor: '#22c55e', // Verde brillante para conquistados
-  currentHexColor: '#fbbf24', // Amarillo dorado para hexágono actual
-  fillOpacity: 0.4, // Transparencia del 40% para mejor visibilidad
-  strokeWidth: 1, // Líneas más finas
-  maxRadius: 5, // Radio máximo de 5 hexágonos desde el jugador
-  maxHexagons: 200, // Máximo 200 hexágonos visibles
-  enableLocalMode: true // Modo local habilitado por defecto
+  resolution: 9,
+  fillColor: '#3b82f6',
+  strokeColor: '#ffffff',
+  conqueredColor: '#ef4444',
+  currentHexColor: '#10b981',
+  fillOpacity: 0.4,
+  strokeWidth: 3,
+  maxRadius: 5,
+  maxHexagons: 100,
+  enableLocalMode: true
 };
 
 /**
@@ -143,12 +143,29 @@ export function hexagonsToGeoJSON(
       const center = h3ToLatLng(h3Index);
       const hexData = hexagonDataMap.get(h3Index);
       
+      const hasResource = !!hexData?.resourceZone;
+      const resourceType = hexData?.resourceZone?.resourceType;
+      const resourceAmount = hexData?.resourceZone?.amount || 0;
+      const emote = getResourceEmote(resourceType);
+      
+      if (hasResource) {
+        console.log(`🎯 Resource hexagon found:`, {
+          h3Index,
+          resourceType,
+          resourceAmount,
+          emote,
+          hasResource
+        });
+      }
+      
       if (index < 3) {
         console.log(`Sample hexagon ${index + 1}:`, {
           h3Index,
           center,
           boundaryPoints: boundary.length,
-          hasData: !!hexData
+          hasData: !!hexData,
+          hasResource,
+          resourceType
         });
       }
       
@@ -159,7 +176,13 @@ export function hexagonsToGeoJSON(
           conquered: hexData?.conquered || false,
           conqueredBy: hexData?.conqueredBy,
           conqueredAt: hexData?.conqueredAt,
-          center
+          center,
+          // Agregar información de recursos
+          hasResource,
+          resourceType,
+          resourceAmount,
+          // Agregar emote basado en el tipo de recurso
+          emote
         },
         geometry: {
           type: 'Polygon' as const,
@@ -213,6 +236,20 @@ export function isValidH3Index(h3Index: string): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Obtiene el emote correspondiente al tipo de recurso
+ */
+export function getResourceEmote(resourceType?: ResourceType): string {
+  if (!resourceType) return '';
+  
+  switch (resourceType) {
+    case 'wood': return '🌲';
+    case 'iron': return '⛏️';
+    case 'stone': return '🪨';
+    default: return '';
   }
 }
 
@@ -309,12 +346,24 @@ export function generateResourceZones(
   const resourceTypes: ResourceType[] = ['wood', 'iron', 'stone'];
   const resourceZones: ResourceZone[] = [];
   
+  if (hexagons.length === 0) {
+    console.warn('No hexagons available for resource generation');
+    return resourceZones;
+  }
+  
+  // Asegurar que siempre haya al menos 3 recursos (uno de cada tipo)
+  const minCount = Math.max(3, Math.min(count, hexagons.length));
+  
   // Selecciona hexágonos aleatorios para zonas de recursos
   const shuffledHexagons = [...hexagons].sort(() => Math.random() - 0.5);
-  const selectedHexagons = shuffledHexagons.slice(0, Math.min(count, hexagons.length));
+  const selectedHexagons = shuffledHexagons.slice(0, minCount);
   
-  selectedHexagons.forEach(hexId => {
-    const resourceType = resourceTypes[Math.floor(Math.random() * resourceTypes.length)];
+  selectedHexagons.forEach((hexId, index) => {
+    // Para los primeros 3, asegurar que hay uno de cada tipo
+    const resourceType = index < 3 
+      ? resourceTypes[index] 
+      : resourceTypes[Math.floor(Math.random() * resourceTypes.length)];
+    
     const baseAmount = getResourceBaseAmount(resourceType);
     
     resourceZones.push({
@@ -325,6 +374,8 @@ export function generateResourceZones(
       lastRegeneration: new Date()
     });
   });
+  
+  console.log(`✅ Generated ${resourceZones.length} resource zones:`, resourceZones.map(z => `${z.resourceType} at ${z.id}`));
   
   return resourceZones;
 }
