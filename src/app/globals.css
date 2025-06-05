@@ -1,26 +1,103 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Existing global styles */
+
+/* Resource Zone Popup Styles */
+.resource-zone-popup {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+.resource-zone-popup-content {
+  padding: 8px;
+  min-width: 150px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+.resource-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.resource-icon {
+  font-size: 16px;
+}
+
+.resource-info {
+  font-size: 12px;
+  color: #4b5563;
+  line-height: 1.4;
+}
+
+.resource-info > div {
+  margin-bottom: 2px;
+}
+
+.collect-hint {
+  color: #059669 !important;
+  font-weight: 500;
+  margin-top: 4px !important;
+}
+
+.empty-hint {
+  color: #dc2626 !important;
+  font-style: italic;
+  margin-top: 4px !important;
+}
+
+/* Hexagon popup styles */
+.hexagon-popup {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #1f2937;
+}
+
+/* Map loading styles */
+.map-loading {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+/* Game UI improvements */
+.game-button {
+  @apply px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-lg;
+}
+
+.game-button:disabled {
+  @apply bg-gray-400 cursor-not-allowed;
+}
+
+.game-panel {
+  @apply bg-black/70 text-white p-3 rounded-lg shadow-lg backdrop-blur-sm;
+}
+
+/* Resource display in HUD */
+.resource-item {
+  @apply flex items-center space-x-2 bg-gray-800/80 px-3 py-2 rounded-lg;
+}
+
+.resource-icon {
+  @apply text-lg;
+}
+
+.resource-amount {
+  @apply text-sm font-bold text-white;
+}
+
+/* Custom animations */
+@keyframes scale-up {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+.animate-scale-up {
+  animation: scale-up 0.2s ease-out;
 }

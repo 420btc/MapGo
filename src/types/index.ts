@@ -13,6 +13,45 @@ export interface PlayerState {
   health: number;
   score: number;
   level: number;
+  resources: ResourceInventory;
+  baseHexagon?: string; // H3 index of player's base
+}
+
+// Resource System Types
+export type ResourceType = 'wood' | 'iron' | 'stone';
+
+export interface ResourceInventory {
+  wood: number;
+  iron: number;
+  stone: number;
+}
+
+export interface ResourceCost {
+  wood?: number;
+  iron?: number;
+  stone?: number;
+}
+
+export interface ResourceZone {
+  id: string; // H3 index
+  resourceType: ResourceType;
+  amount: number; // Amount available for collection
+  regenerationRate: number; // Resources per hour
+  lastRegeneration: Date;
+}
+
+// Base System Types
+export type BaseLevel = 1 | 2;
+
+export interface PlayerBase {
+  id: string; // H3 index
+  playerId: string;
+  level: BaseLevel;
+  health: number;
+  maxHealth: number;
+  lastMaintenance: Date;
+  resourceGeneration: ResourceInventory; // Resources generated per hour
+  maintenanceCost: ResourceInventory; // Resources required per maintenance cycle
 }
 
 export interface GeolocationError {
@@ -40,6 +79,10 @@ export interface HexagonData {
   conqueredBy?: string;
   conqueredAt?: Date;
   center: [number, number]; // [lng, lat]
+  resourceZone?: ResourceZone;
+  base?: PlayerBase;
+  conquestCost: ResourceCost; // Cost to conquer this hexagon
+  maintenanceCost: ResourceCost; // Cost to maintain this hexagon per cycle
 }
 
 export interface H3Config {

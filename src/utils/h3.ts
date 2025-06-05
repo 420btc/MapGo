@@ -1,15 +1,15 @@
 import { latLngToCell, cellToBoundary, gridDisk, cellToLatLng } from 'h3-js';
-import type { PlayerPosition, HexagonData, H3Config } from '@/types';
+import type { PlayerPosition, HexagonData, H3Config, ResourceType, ResourceZone, ResourceCost, ResourceInventory } from '@/types';
 
 // Configuración por defecto para H3
 export const DEFAULT_H3_CONFIG: H3Config = {
   resolution: 9, // ~50-100 metros por hexágono
-  fillColor: '#3b82f6',
-  strokeColor: '#1e40af',
-  conqueredColor: '#10b981',
-  currentHexColor: '#f59e0b',
-  fillOpacity: 0.3,
-  strokeWidth: 2,
+  fillColor: '#60a5fa', // Azul claro transparente para hexágonos no conquistados
+  strokeColor: '#e0e7ff', // Líneas azul claro más sutiles
+  conqueredColor: '#22c55e', // Verde brillante para conquistados
+  currentHexColor: '#fbbf24', // Amarillo dorado para hexágono actual
+  fillOpacity: 0.4, // Transparencia del 40% para mejor visibilidad
+  strokeWidth: 1, // Líneas más finas
   maxRadius: 5, // Radio máximo de 5 hexágonos desde el jugador
   maxHexagons: 200, // Máximo 200 hexágonos visibles
   enableLocalMode: true // Modo local habilitado por defecto
@@ -20,9 +20,27 @@ export const DEFAULT_H3_CONFIG: H3Config = {
  */
 export function getH3Index(lat: number, lng: number, resolution: number = 9): string {
   try {
-    return latLngToCell(lat, lng, resolution);
+    // Validar coordenadas
+    if (isNaN(lat) || isNaN(lng)) {
+      throw new Error(`Invalid coordinates: lat=${lat}, lng=${lng}`);
+    }
+    
+    // Validar resolución
+    if (resolution < 0 || resolution > 15) {
+      throw new Error(`Invalid resolution: ${resolution}. Must be between 0 and 15`);
+    }
+    
+    const h3Index = latLngToCell(lat, lng, resolution);
+    
+    // Validar el índice generado
+    if (!h3Index || h3Index.length === 0) {
+      throw new Error('Failed to generate H3 index');
+    }
+    
+    return h3Index;
   } catch (error) {
     console.error('Error getting H3 index:', error);
+    console.error('Parameters:', { lat, lng, resolution });
     throw new Error('Failed to get H3 index');
   }
 }
@@ -53,9 +71,17 @@ export function h3ToLatLng(h3Index: string): [number, number] {
 export function getHexagonBoundary(h3Index: string): number[][] {
   try {
     const boundary = cellToBoundary(h3Index);
+    
+    // Debug: verificar que tengamos al menos 6 puntos (hexágono)
+    if (boundary.length < 6) {
+      console.error(`❌ Invalid boundary for ${h3Index}: only ${boundary.length} points`);
+      throw new Error('Invalid hexagon boundary');
+    }
+    
     // Convierte de [lat, lng] a [lng, lat] para Mapbox y cierra el polígono
     const coordinates = boundary.map(([lat, lng]) => [lng, lat]);
     coordinates.push(coordinates[0]); // Cierra el polígono
+    
     return coordinates;
   } catch (error) {
     console.error('Error getting hexagon boundary:', error);
@@ -73,11 +99,24 @@ export function generateHexagonsInRadius(
   resolution: number = 9
 ): string[] {
   try {
+    console.log(`🔵 Generating hexagons: center(${centerLat}, ${centerLng}), radius=${radius}, resolution=${resolution}`);
+    
+    // Validar coordenadas
+    if (isNaN(centerLat) || isNaN(centerLng)) {
+      console.error('❌ Invalid coordinates:', { centerLat, centerLng });
+      return [];
+    }
+    
     const centerH3 = getH3Index(centerLat, centerLng, resolution);
-    return gridDisk(centerH3, radius);
+    console.log('📍 Center H3 index:', centerH3);
+    
+    const hexagons = gridDisk(centerH3, radius);
+    console.log(`✅ Generated ${hexagons.length} hexagons`);
+    
+    return hexagons;
   } catch (error) {
-    console.error('Error generating hexagons in radius:', error);
-    throw new Error('Failed to generate hexagons');
+    console.error('❌ Error generating hexagons in radius:', error);
+    return [];
   }
 }
 
@@ -88,27 +127,53 @@ export function hexagonsToGeoJSON(
   hexagons: string[],
   hexagonDataMap: Map<string, HexagonData>
 ): GeoJSON.FeatureCollection {
-  const features: GeoJSON.Feature[] = hexagons.map(h3Index => {
-    const boundary = getHexagonBoundary(h3Index);
-    const center = h3ToLatLng(h3Index);
-    const hexData = hexagonDataMap.get(h3Index);
-    
+  console.log(`🔵 Converting ${hexagons.length} hexagons to GeoJSON`);
+  
+  if (!hexagons || hexagons.length === 0) {
+    console.warn('⚠️ No hexagons to convert to GeoJSON');
     return {
-      type: 'Feature' as const,
-      properties: {
-        h3Index,
-        conquered: hexData?.conquered || false,
-        conqueredBy: hexData?.conqueredBy,
-        conqueredAt: hexData?.conqueredAt,
-        center
-      },
-      geometry: {
-        type: 'Polygon' as const,
-        coordinates: [boundary]
-      }
+      type: 'FeatureCollection' as const,
+      features: []
     };
-  });
+  }
+  
+  const features: GeoJSON.Feature[] = hexagons.map((h3Index, index) => {
+    try {
+      const boundary = getHexagonBoundary(h3Index);
+      const center = h3ToLatLng(h3Index);
+      const hexData = hexagonDataMap.get(h3Index);
+      
+      if (index < 3) {
+        console.log(`Sample hexagon ${index + 1}:`, {
+          h3Index,
+          center,
+          boundaryPoints: boundary.length,
+          hasData: !!hexData
+        });
+      }
+      
+      return {
+        type: 'Feature' as const,
+        properties: {
+          h3Index,
+          conquered: hexData?.conquered || false,
+          conqueredBy: hexData?.conqueredBy,
+          conqueredAt: hexData?.conqueredAt,
+          center
+        },
+        geometry: {
+          type: 'Polygon' as const,
+          coordinates: [boundary]
+        }
+      };
+    } catch (error) {
+      console.error(`❌ Error processing hexagon ${h3Index}:`, error);
+      return null;
+    }
+  }).filter(feature => feature !== null) as GeoJSON.Feature[];
 
+  console.log(`✅ Created ${features.length} valid features`);
+  
   return {
     type: 'FeatureCollection' as const,
     features
@@ -159,17 +224,27 @@ export function getHexagonsInPlayerRadius(
   config: H3Config
 ): string[] {
   try {
+    console.log(`🔵 Getting hexagons in player radius:`, {
+      position: playerPosition,
+      maxRadius: config.maxRadius,
+      resolution: config.resolution
+    });
+    
     const centerH3 = getCurrentHexagon(playerPosition, config.resolution);
+    console.log('📍 Player H3 index:', centerH3);
+    
     const hexagons = gridDisk(centerH3, config.maxRadius);
+    console.log(`✅ Generated ${hexagons.length} hexagons around player`);
     
     // Limita el número máximo de hexágonos
     if (hexagons.length > config.maxHexagons) {
+      console.log(`⚠️ Limiting hexagons from ${hexagons.length} to ${config.maxHexagons}`);
       return hexagons.slice(0, config.maxHexagons);
     }
     
     return hexagons;
   } catch (error) {
-    console.error('Error getting hexagons in player radius:', error);
+    console.error('❌ Error getting hexagons in player radius:', error);
     return [];
   }
 }
@@ -221,5 +296,149 @@ export function getHexagonsInBounds(
   } catch (error) {
     console.error('Error getting hexagons in bounds:', error);
     return [];
+  }
+}
+
+/**
+ * Genera zonas de recursos aleatorias en hexágonos
+ */
+export function generateResourceZones(
+  hexagons: string[],
+  count: number = 8
+): ResourceZone[] {
+  const resourceTypes: ResourceType[] = ['wood', 'iron', 'stone'];
+  const resourceZones: ResourceZone[] = [];
+  
+  // Selecciona hexágonos aleatorios para zonas de recursos
+  const shuffledHexagons = [...hexagons].sort(() => Math.random() - 0.5);
+  const selectedHexagons = shuffledHexagons.slice(0, Math.min(count, hexagons.length));
+  
+  selectedHexagons.forEach(hexId => {
+    const resourceType = resourceTypes[Math.floor(Math.random() * resourceTypes.length)];
+    const baseAmount = getResourceBaseAmount(resourceType);
+    
+    resourceZones.push({
+      id: hexId,
+      resourceType,
+      amount: baseAmount + Math.floor(Math.random() * baseAmount),
+      regenerationRate: getResourceRegenRate(resourceType),
+      lastRegeneration: new Date()
+    });
+  });
+  
+  return resourceZones;
+}
+
+/**
+ * Obtiene la cantidad base de recursos por tipo
+ */
+export function getResourceBaseAmount(resourceType: ResourceType): number {
+  switch (resourceType) {
+    case 'wood': return 50;
+    case 'iron': return 30;
+    case 'stone': return 40;
+    default: return 30;
+  }
+}
+
+/**
+ * Obtiene la tasa de regeneración por tipo de recurso (por hora)
+ */
+function getResourceRegenRate(resourceType: ResourceType): number {
+  switch (resourceType) {
+    case 'wood': return 10;
+    case 'iron': return 5;
+    case 'stone': return 8;
+    default: return 5;
+  }
+}
+
+/**
+ * Genera costos aleatorios para conquistar un hexágono
+ */
+export function generateHexagonConquestCost(): ResourceCost {
+  return {
+    wood: Math.floor(Math.random() * 10) + 5,
+    iron: Math.floor(Math.random() * 8) + 3,
+    stone: Math.floor(Math.random() * 12) + 8
+  };
+}
+
+/**
+ * Genera costos de mantenimiento para un hexágono
+ */
+export function generateHexagonMaintenanceCost(): ResourceCost {
+  return {
+    wood: Math.floor(Math.random() * 3) + 2,
+    iron: Math.floor(Math.random() * 2) + 1,
+    stone: Math.floor(Math.random() * 4) + 3
+  };
+}
+
+/**
+ * Verifica si el jugador tiene suficientes recursos
+ */
+export function hasEnoughResources(
+  playerResources: ResourceInventory,
+  requiredResources: ResourceCost
+): boolean {
+  return (
+    playerResources.wood >= (requiredResources.wood || 0) &&
+    playerResources.iron >= (requiredResources.iron || 0) &&
+    playerResources.stone >= (requiredResources.stone || 0)
+  );
+}
+
+/**
+ * Resta recursos del inventario del jugador
+ */
+export function subtractResources(
+  playerResources: ResourceInventory,
+  cost: ResourceCost
+): ResourceInventory {
+  return {
+    wood: playerResources.wood - (cost.wood || 0),
+    iron: playerResources.iron - (cost.iron || 0),
+    stone: playerResources.stone - (cost.stone || 0)
+  };
+}
+
+/**
+ * Suma recursos al inventario del jugador
+ */
+export function addResources(
+  playerResources: ResourceInventory,
+  resources: ResourceCost
+): ResourceInventory {
+  return {
+    wood: playerResources.wood + (resources.wood || 0),
+    iron: playerResources.iron + (resources.iron || 0),
+    stone: playerResources.stone + (resources.stone || 0)
+  };
+}
+
+/**
+ * Obtiene la configuración de base por nivel
+ */
+export function getBaseConfig(level: 1 | 2) {
+  switch (level) {
+    case 1:
+      return {
+        name: 'Choza',
+        maxHealth: 100,
+        resourceGeneration: { wood: 3, iron: 2, stone: 2 } as ResourceInventory,
+        maintenanceCost: { wood: 5, iron: 3, stone: 4 } as ResourceInventory,
+        upgradeCost: { wood: 50, iron: 30, stone: 40 } as ResourceCost
+      };
+    case 2:
+      return {
+        name: 'Fortaleza',
+        maxHealth: 250,
+        resourceGeneration: { wood: 8, iron: 6, stone: 7 } as ResourceInventory,
+        maintenanceCost: { wood: 12, iron: 8, stone: 10 } as ResourceInventory,
+        upgradeCost: null
+      };
+    default:
+      return getBaseConfig(1);
   }
 }
